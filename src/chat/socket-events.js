@@ -2,107 +2,47 @@ const config = require('../config');
 const phpbbClient = require('../auth/phpbb-client');
 const { RoomManager } = require('./room-manager');
 const presenceManager = require('./presence');
-
-const MAX_ROOM_ID_LENGTH = 128;
-const MAX_MESSAGE_LENGTH = 5000;
-const MAX_TOKEN_LENGTH = 256;
-
-/**
- * Personal Socket.io room for a user. Uses ':' which is not allowed in
- * chat room IDs, so a chat room can never collide with a personal room.
- */
-const personalRoom = (userId) => `user:${userId}`;
-
-/**
- * Validate a client-supplied room ID
- * @param {*} roomId
- * @returns {boolean}
- */
-function isValidRoomId(roomId) {
-  return (
-    typeof roomId === 'string' &&
-    roomId.length > 0 &&
-    roomId.length <= MAX_ROOM_ID_LENGTH &&
-    roomId === roomId.trim() &&
-    !/[\x00-\x1f\x7f:]/.test(roomId)
-  );
-}
-
-/**
- * Canonical DM room ID for two users, independent of who starts the DM
- */
-function dmRoomId(userIdA, userIdB) {
-  const ids = [String(userIdA), String(userIdB)].sort();
-  return `dm_${ids[0]}_${ids[1]}`;
-}
-
-/**
- * Wrap a socket event handler so malformed client input can never crash the
- * process: the payload is always an object, the ack is always callable, and
- * sync throws / async rejections are caught and reported to the client.
- * @param {string} event - Event name (for logging)
- * @param {Function} fn - (data, ack) => void|Promise<void>
- */
-function safeHandler(event, fn) {
-  return async (data, callback) => {
-    const ack = typeof callback === 'function' ? callback : () => {};
-    const payload = data !== null && typeof data === 'object' ? data : {};
-    try {
-      await fn(payload, ack);
-    } catch (error) {
-      console.error(`[Socket] Error handling "${event}":`, error);
-      ack({ success: false, error: 'Internal server error' });
-    }
-  };
-}
-
-/**
- * Generate a random guest username
- */
-function generateRandomUsername() {
-  const adjectives = ['Happy', 'Clever', 'Quick', 'Bright', 'Swift', 'Bold', 'Calm', 'Wise'];
-  const animals = ['Panda', 'Eagle', 'Tiger', 'Fox', 'Hawk', 'Bear', 'Wolf', 'Lion'];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const animal = animals[Math.floor(Math.random() * animals.length)];
-  const num = Math.floor(Math.random() * 1000);
-  return `${adj}${animal}${num}`;
-}
-
-/**
- * Find the phpBB session ID in the handshake cookies
- * @param {string|undefined} cookieHeader
- * @returns {string|null}
- */
-function getSessionIdFromCookies(cookieHeader) {
-  if (!cookieHeader) return null;
-
-  for (const part of cookieHeader.split(';')) {
-    const index = part.indexOf('=');
-    if (index === -1) continue;
-    // Default phpBB3 cookies end in _sid
-    if (part.substring(0, index).trim().endsWith('_sid')) {
-      try {
-        return decodeURIComponent(part.substring(index + 1).trim());
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
+const {
+  MAX_MESSAGE_LENGTH,
+  MAX_TOKEN_LENGTH,
+  personalRoom,
+  isValidRoomId,
+  dmRoomId,
+  safeHandler,
+  generateRandomUsername,
+  getSessionIdFromCookies,
+} = require('./helpers');
 
 /**
  * Initialize Socket.io event handlers
  * @param {Server} io - Socket.io server instance
  */
 function initializeSocketEvents(io) {
-  // Store active socket connections: socketId -> { userId, username, roles }
-  const socketUsers = new Map();
+  /**
+   * Remove a user from a room, notify the room and the user's own sockets
+   * (other tabs), and delete the room once it is empty
+   */
+  const removeUserFromRoom = (room, user) => {
+    room.removeUser(user.id);
+    io.in(personalRoom(user.id)).socketsLeave(room.id);
+
+    io.to(room.id).to(personalRoom(user.id)).emit('user-left-room', {
+      roomId: room.id,
+      userId: user.id,
+      username: user.username,
+      timestamp: new Date(),
+    });
+
+    if (room.users.size === 0) {
+      RoomManager.deleteRoom(room.id);
+    }
+  };
 
   io.on('connection', (socket) => {
     console.log(`[Socket] New connection: ${socket.id}`);
 
-    const getUser = () => socketUsers.get(socket.id);
+    // The authenticated user of this socket: { id, username, roles }
+    const getUser = () => socket.data.user;
 
     /**
      * Register an event that requires an authenticated user.
@@ -122,18 +62,25 @@ function initializeSocketEvents(io) {
      * Mark the socket as authenticated and announce the user
      */
     const completeAuthentication = (user, ack) => {
-      socketUsers.set(socket.id, user);
-      presenceManager.userOnline(user.id, user.username, socket.id, user.roles);
+      socket.data.user = user;
       socket.join(personalRoom(user.id));
 
+      // Another tab of a user who is already online joins the rooms they are in
+      for (const roomId of RoomManager.getUserRooms(user.id)) {
+        socket.join(roomId);
+      }
+
+      const cameOnline = presenceManager.addSocket(user, socket.id);
       console.log(`[Socket] User authenticated: ${user.username} (${socket.id})`);
 
-      // Notify all clients of new user online
-      io.emit('user-online', {
-        userId: user.id,
-        username: user.username,
-        timestamp: new Date(),
-      });
+      if (cameOnline) {
+        // Notify all clients of new user online
+        io.emit('user-online', {
+          userId: user.id,
+          username: user.username,
+          timestamp: new Date(),
+        });
+      }
 
       ack({
         success: true,
@@ -209,6 +156,16 @@ function initializeSocketEvents(io) {
     // ============================================
 
     /**
+     * Get a room the user is currently a member of
+     * @returns {ChatRoom|null}
+     */
+    const getJoinedRoom = (roomId, user) => {
+      if (!isValidRoomId(roomId)) return null;
+      const room = RoomManager.getRoom(roomId);
+      return room && room.users.has(user.id) ? room : null;
+    };
+
+    /**
      * Resolve (and create if needed) the room a join-room request targets.
      * @returns {{ room?: ChatRoom, error?: string }}
      */
@@ -258,7 +215,7 @@ function initializeSocketEvents(io) {
         return { error: 'Room creation is disabled' };
       }
 
-      const roomName = roomId === 'public' ? 'Public' : `Room: ${roomId}`;
+      const roomName = roomId === 'public' ? 'Public' : roomId;
       return { room: RoomManager.createRoom(roomId, roomName, { createdBy: user.id }) };
     };
 
@@ -283,16 +240,13 @@ function initializeSocketEvents(io) {
       const alreadyInRoom = room.users.has(user.id);
 
       // Add user to room
-      const added = room.addUser(user.id, user.username, user.roles, socket.id);
+      const added = room.addUser(user.id, user.username, user.roles);
       if (!added) {
         return ack({ success: false, error: 'Failed to join room' });
       }
 
-      // Join Socket.io room
-      socket.join(room.id);
-
-      // Track user's room
-      presenceManager.userJoinedRoom(user.id, room.id);
+      // Membership is per user, so all of the user's sockets (tabs) join
+      io.in(personalRoom(user.id)).socketsJoin(room.id);
 
       console.log(`[Room] ${user.username} joined ${room.id} (wasAlreadyInRoom: ${alreadyInRoom})`);
 
@@ -326,34 +280,13 @@ function initializeSocketEvents(io) {
      * User leaves a chat room
      */
     onAuthenticated('leave-room', (data, ack, user) => {
-      const roomId = data.roomId;
-      const room = isValidRoomId(roomId) ? RoomManager.getRoom(roomId) : null;
-
-      if (!room || !room.users.has(user.id)) {
+      const room = getJoinedRoom(data.roomId, user);
+      if (!room) {
         return ack({ success: false, error: 'Room not found' });
       }
 
-      // Remove user from room
-      room.removeUser(user.id);
-      presenceManager.userLeftRoom(user.id, roomId);
-
-      // Leave Socket.io room
-      socket.leave(roomId);
-
-      console.log(`[Room] ${user.username} left ${roomId}`);
-
-      // Notify room members
-      io.to(roomId).emit('user-left-room', {
-        roomId,
-        userId: user.id,
-        username: user.username,
-        timestamp: new Date(),
-      });
-
-      // Delete empty rooms (optional)
-      if (room.users.size === 0) {
-        RoomManager.deleteRoom(roomId);
-      }
+      removeUserFromRoom(room, user);
+      console.log(`[Room] ${user.username} left ${room.id}`);
 
       ack({ success: true });
 
@@ -367,29 +300,16 @@ function initializeSocketEvents(io) {
      */
     onAuthenticated('get-rooms', (data, ack, user) => {
       // This will only return public rooms and private/DM rooms the user is allowed to join
-      const rooms = RoomManager.getAccessibleRooms(user).map((r) => {
-        const roomInstance = RoomManager.getRoom(r.id);
-        return {
-          ...r,
-          isJoined: roomInstance ? roomInstance.users.has(user.id) : false,
-        };
-      });
+      const rooms = RoomManager.getAccessibleRooms(user).map((r) => ({
+        ...r,
+        isJoined: RoomManager.getRoom(r.id).users.has(user.id),
+      }));
       ack({ success: true, rooms });
     });
 
     // ============================================
     // MESSAGING
     // ============================================
-
-    /**
-     * Get a room the user is currently a member of
-     * @returns {ChatRoom|null}
-     */
-    const getJoinedRoom = (roomId, user) => {
-      if (!isValidRoomId(roomId)) return null;
-      const room = RoomManager.getRoom(roomId);
-      return room && room.users.has(user.id) ? room : null;
-    };
 
     /**
      * Event: send-message
@@ -512,13 +432,14 @@ function initializeSocketEvents(io) {
      */
     onAuthenticated('get-online-users', (data, ack, user) => {
       if (data.roomId === undefined || data.roomId === null) {
-        return ack({ success: true, users: presenceManager.getAllOnlineUsers() });
+        return ack({ success: true, users: presenceManager.getOnlineUsers() });
       }
 
       const room = getVisibleRoom(data.roomId, user);
       if (!room) return ack({ success: false, error: 'Room not found' });
 
-      ack({ success: true, users: presenceManager.getOnlineUsersInRoom(room.id) });
+      const users = room.getUsers().map(({ userId, username }) => ({ userId, username }));
+      ack({ success: true, users });
     });
 
     // ============================================
@@ -526,48 +447,27 @@ function initializeSocketEvents(io) {
     // ============================================
 
     socket.on('disconnect', () => {
-      const user = socketUsers.get(socket.id);
+      const user = getUser();
+      if (!user) return;
 
-      if (user) {
-        console.log(
-          `[Socket] User disconnected: ${user.username} (${socket.id})`
-        );
+      console.log(`[Socket] User disconnected: ${user.username} (${socket.id})`);
 
-        // Remove from all rooms
-        const userRooms = presenceManager.getUser(user.id)?.rooms || [];
-        for (const roomId of userRooms) {
-          const room = RoomManager.getRoom(roomId);
-          if (room) {
-            room.removeUser(user.id);
-            io.to(roomId).emit('user-left-room', {
-              roomId,
-              userId: user.id,
-              username: user.username,
-              timestamp: new Date(),
-            });
+      // The user stays online (and in their rooms) while another tab is open
+      if (!presenceManager.removeSocket(user.id, socket.id)) return;
 
-            // Delete empty rooms
-            if (room.users.size === 0) {
-              RoomManager.deleteRoom(roomId);
-            }
-          }
-        }
-
-        // Notify clients about room changes (counters)
-        io.emit('rooms-updated');
-
-        // Remove from presence
-        presenceManager.userOffline(user.id);
-
-        // Notify all clients
-        io.emit('user-offline', {
-          userId: user.id,
-          username: user.username,
-          timestamp: new Date(),
-        });
-
-        socketUsers.delete(socket.id);
+      for (const roomId of RoomManager.getUserRooms(user.id)) {
+        removeUserFromRoom(RoomManager.getRoom(roomId), user);
       }
+
+      // Notify clients about room changes (counters)
+      io.emit('rooms-updated');
+
+      // Notify all clients
+      io.emit('user-offline', {
+        userId: user.id,
+        username: user.username,
+        timestamp: new Date(),
+      });
     });
 
     /**

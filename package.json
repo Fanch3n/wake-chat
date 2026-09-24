@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node --env-file=.env src/server.js",
-    "dev": "nodemon --watch src --watch .env --env-file=.env src/server.js"
+    "dev": "nodemon --watch src --watch .env --env-file=.env src/server.js",
+    "test": "node --test"
   },
   "keywords": [
     "chat",
@@ -22,10 +23,10 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.6.1",
-    "socket.io-client": "^4.8.3"
+    "socket.io": "^4.6.1"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "nodemon": "^2.0.22",
+    "socket.io-client": "^4.8.3"
   }
 }

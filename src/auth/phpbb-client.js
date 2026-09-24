@@ -53,67 +53,6 @@ class PhpBBClient {
       };
     }
   }
-
-  /**
-   * Get user info by user ID
-   * @param {string|number} userId - phpBB user ID
-   * @returns {Promise<object>} User info
-   */
-  async getUserInfo(userId) {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/users/${userId}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000)
-      });
-      
-      if (!response.ok) return null;
-
-      const data = await response.json();
-      
-      if (data.user) {
-        return {
-          id: data.user.id,
-          username: data.user.username,
-          email: data.user.email,
-          roles: data.user.roles || [],
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('[phpBB] Get user info error:', error.message);
-      return null;
-    }
-  }
-
-  /**
-   * Check if a user has a specific role
-   * @param {string[]} userRoles - Array of user role names
-   * @param {string} roleName - Role name to check (e.g., 'admin', 'moderator')
-   * @returns {boolean}
-   */
-  static hasRole(userRoles, roleName) {
-    return Array.isArray(userRoles) && userRoles.includes(roleName);
-  }
-
-  /**
-   * Check if user is admin
-   * @param {string[]} userRoles - Array of user role names
-   * @returns {boolean}
-   */
-  static isAdmin(userRoles) {
-    return PhpBBClient.hasRole(userRoles, 'admin');
-  }
-
-  /**
-   * Check if user is moderator
-   * @param {string[]} userRoles - Array of user role names
-   * @returns {boolean}
-   */
-  static isModerator(userRoles) {
-    return PhpBBClient.hasRole(userRoles, 'moderator');
-  }
 }
 
 module.exports = new PhpBBClient();

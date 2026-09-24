@@ -9,7 +9,22 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   build:
+    # Only publish images of code that passes the tests
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

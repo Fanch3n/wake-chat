@@ -1,4 +1,4 @@
-const phpbbClient = require('../auth/phpbb-client');
+const { randomUUID } = require('crypto');
 
 /**
  * Represents a single chat room
@@ -8,7 +8,7 @@ class ChatRoom {
     this.id = roomId;
     this.name = name;
     this.createdAt = new Date();
-    this.users = new Map(); // userId -> { username, roles, socketId }
+    this.users = new Map(); // userId -> { username, roles }
     this.messages = []; // In-memory message buffer
     this.maxMessages = options.maxMessages || 100; // Keep last 100 messages in memory
     this.isPrivate = options.isPrivate || false;
@@ -33,9 +33,7 @@ class ChatRoom {
     }
 
     // User must have at least one allowed role
-    return this.allowedRoles.some((role) =>
-      phpbbClient.constructor.hasRole(user.roles, role)
-    );
+    return Array.isArray(user.roles) && this.allowedRoles.some((role) => user.roles.includes(role));
   }
 
   /**
@@ -43,15 +41,14 @@ class ChatRoom {
    * @param {string} userId - User ID
    * @param {string} username - Username
    * @param {string[]} roles - User roles
-   * @param {string} socketId - Socket.io socket ID
    * @returns {boolean} Success
    */
-  addUser(userId, username, roles, socketId) {
+  addUser(userId, username, roles) {
     if (!this.canUserJoin({ id: userId, username, roles })) {
       return false;
     }
 
-    this.users.set(userId, { username, roles, socketId });
+    this.users.set(userId, { username, roles });
     return true;
   }
 
@@ -81,7 +78,7 @@ class ChatRoom {
    */
   addMessage(message) {
     const fullMessage = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: randomUUID(),
       ...message,
       timestamp: message.timestamp || new Date(),
     };
@@ -116,6 +113,7 @@ class ChatRoom {
       createdAt: this.createdAt,
       createdBy: this.createdBy,
       isPrivate: this.isPrivate,
+      isDirectMessage: this.isDirectMessage,
       allowedRoles: this.allowedRoles,
       userCount: this.users.size,
       messageCount: this.messages.length,
@@ -170,14 +168,6 @@ class RoomManager {
       console.log(`[Room] Deleted: ${roomId}`);
     }
     return deleted;
-  }
-
-  /**
-   * Get all rooms
-   * @returns {array} Array of room info
-   */
-  getAllRooms() {
-    return Array.from(this.rooms.values()).map((room) => room.toJSON());
   }
 
   /**

@@ -22,7 +22,13 @@ USER node
 # Expose the port your server runs on (default 3000)
 EXPOSE 3000
 
+# Let Docker report the container as unhealthy when the server stops responding
+# (busybox wget ships with the Alpine image)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null "http://127.0.0.1:${PORT:-3000}/health" || exit 1
+
 # Start node directly: configuration comes from environment variables
 # (docker-compose env_file), not from a .env file inside the image.
-# Running node as PID 1 also lets it receive SIGTERM on docker stop.
+# Node runs as PID 1 and receives SIGTERM on docker stop directly;
+# src/server.js handles it and shuts down cleanly.
 CMD ["node", "src/server.js"]

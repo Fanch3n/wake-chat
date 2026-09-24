@@ -9,6 +9,7 @@ A real-time group chat application built with Node.js (Express), Socket.io, and 
 ✅ **Online Presence** — See who's online and active in each room  
 ✅ **Role-Based Permissions** — Enforce chat access based on phpBB user roles (admin, moderator, etc.)  
 ✅ **Typing Indicators** — Real-time typing status for better UX  
+✅ **Light & Dark Mode** — Follows the system setting, with a manual toggle  
 ✅ **Multiple Chat Rooms** — Create and join different chat spaces dynamically  
 ✅ **Direct Messages** — Private one-to-one rooms between online users  
 ✅ **Zero Persistence** — Lightweight memory-based chat (add database later)  
@@ -97,18 +98,19 @@ Open browser: **http://localhost:3000**
 
 ### 2. Authenticate
 
-You need a valid phpBB API token to authenticate:
+If you're logged in to the forum on the same domain, the chat signs you in automatically from the phpBB session cookie. Otherwise:
 
-1. Generate/obtain a phpBB API token from your phpBB installation
-2. Paste the token in the "phpBB Token" field
-3. Click "Authenticate"
+1. Paste your phpBB session ID into the "phpBB session ID" field and click "Sign in", or
+2. Click "Continue as guest" (if `ALLOW_GUESTS` is enabled)
 
 ### 3. Chat
 
-- **Join/Create Room**: Enter room ID (e.g., "general", "gaming") and click "Join"
-- **Send Message**: Type message and press Enter or click "Send"
-- **See Online Users**: Online users appear in the sidebar
-- **Typing Indicator**: Shows when others are typing
+- **Join/Create Room**: Type a room name (e.g., "general", "gaming") in the sidebar and click "Join"
+- **Send Message**: Press Enter to send; Shift+Enter inserts a line break
+- **Direct Messages**: Click a user in the sidebar to message them privately
+- **Unread Messages**: Rooms with new messages show a badge, and the count appears in the tab title
+- **Dark Mode**: Use the sun/moon button in the top right. The chat follows your system setting until you pick a mode
+- **Mobile**: On small screens, the menu button opens the room list
 
 ## phpBB Integration
 
@@ -221,16 +223,21 @@ Returns public configuration (phpBB API endpoint).
 ```
 .
 ├── src/
-│   ├── server.js              # Express + Socket.io setup
-│   ├── config.js              # Configuration
+│   ├── server.js              # Entry point: starts the server, handles shutdown
+│   ├── app.js                 # Express + Socket.io setup and HTTP routes
+│   ├── config.js              # Configuration from environment variables
 │   ├── auth/
-│   │   └── phpbb-client.js    # phpBB API client
+│   │   └── phpbb-client.js    # phpBB session validation
 │   └── chat/
-│       ├── room-manager.js    # Chat room logic
 │       ├── socket-events.js   # Socket.io event handlers
-│       └── presence.js        # Online user tracking
+│       ├── room-manager.js    # Rooms, their members and message history
+│       ├── presence.js        # Who is online (a user may have several tabs open)
+│       └── helpers.js         # Validation and other pure helpers
 ├── public/
-│   └── index.html             # Web client
+│   ├── index.html             # Web client markup
+│   ├── css/app.css            # Styles, including light and dark theme
+│   └── js/                    # Client ES modules (app.js is the entry point)
+├── test/                      # Tests (node:test)
 ├── phpbb-extension/           # phpBB extension (SSO endpoint + online-users widget)
 ├── .github/workflows/         # Builds and publishes the Docker image to GHCR
 ├── Dockerfile                 # Container image
@@ -244,10 +251,11 @@ Returns public configuration (phpBB API endpoint).
 
 ### Running Tests
 
-Currently no tests. To add:
 ```bash
-npm install --save-dev jest
+npm test
 ```
+
+The tests use Node's built-in test runner. `test/chat.test.js` starts the chat server with a fake phpBB endpoint and drives it with real Socket.io clients. GitHub Actions runs the tests before building the Docker image.
 
 ### Logging
 

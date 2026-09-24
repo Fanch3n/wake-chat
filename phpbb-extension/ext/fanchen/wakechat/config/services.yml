@@ -1,0 +1,6 @@
+services:
+    fanchen.wakechat.controller.main_controller:
+        class: fanchen\wakechat\controller\main_controller
+        arguments:
+            - '@user'
+            - '@dbal.conn'

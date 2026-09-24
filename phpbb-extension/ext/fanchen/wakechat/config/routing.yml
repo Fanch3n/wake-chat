@@ -1,0 +1,9 @@
+# Route for chat online users
+fanchen_wakechat_online_users:
+    path: /api/chat/online-users
+    defaults: { _controller: fanchen.wakechat.controller.main_controller:chat_online_users }
+    methods: [GET]
+fanchen_wakechat_auth_validate:
+    path: /api/auth/validate
+    defaults: { _controller: fanchen.wakechat.controller.main_controller:validate }
+    methods: [POST]

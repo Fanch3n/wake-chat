@@ -1,0 +1,22 @@
+{
+  "name": "fanchen/wakechat",
+  "type": "phpbb-extension",
+  "description": "phpBB integration for the Wake real-time chat server: SSO and online users display.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Fanchen"
+    }
+  ],
+  "require": {
+    "php": ">=8.2",
+    "phpbb/phpbb": ">=3.3.0"
+  },
+  "extra": {
+    "display-name": "Wake Chat",
+    "soft-require": {
+      "phpbb/phpbb": ">=3.3.0"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+services:
+  wake-chat:
+    # Image published by .github/workflows/docker.yml
+    # (GHCR image names must be lowercase)
+    image: ghcr.io/fanch3n/wake-chat:main
+    # For local development, build from source instead of pulling:
+    # build: .
+    container_name: wake-chat
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    # Easily load your local .env file into the container
+    env_file:
+      - .env
+    # Optionally mount your logs or directories if you want live-reloading in dev
+    # volumes:
+    #   - ./src:/app/src
+    #   - ./public:/app/public

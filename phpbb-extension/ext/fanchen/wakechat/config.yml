@@ -1,0 +1,9 @@
+# Add the chat backend API URL for online users
+chat_backend_api_url: "http://localhost:3000/api/chat/online-users"
+name: Wake Chat
+version: 0.1.0
+author: Fanchen
+
+# Required for phpBB extension manager
+display-name: Wake Chat
+description: Provides an API endpoint for chat SSO integration.

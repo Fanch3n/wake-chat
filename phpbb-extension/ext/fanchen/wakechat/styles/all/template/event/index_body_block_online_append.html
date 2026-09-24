@@ -1,0 +1,36 @@
+<p id="chat-online-users-container" style="display: none;">
+    <strong>Users in <span id="chat-online-users-app-name">Wake</span>:</strong> <span id="chat-online-users-list">Loading...</span>
+</p>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Fetch the online users from the phpBB extension proxy endpoint
+        fetch('{{ path("fanchen_wakechat_online_users") }}')
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                const container = document.getElementById('chat-online-users-container');
+                const list = document.getElementById('chat-online-users-list');
+
+                // Chat name is configured on the chat server (APP_NAME)
+                if (data && data.appName) {
+                    document.getElementById('chat-online-users-app-name').textContent = data.appName;
+                }
+
+                if (data && data.users && data.users.length > 0) {
+                    const usernames = data.users.map(user => user.username).join(', ');
+                    list.textContent = usernames + ' (' + data.users.length + ')';
+                } else {
+                    list.textContent = '0 users currently in chat.';
+                }
+
+                // Make the text visible once loaded
+                container.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('[Wake Chat] Error fetching online users:', error);
+            });
+    });
+</script>

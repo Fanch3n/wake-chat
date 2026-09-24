@@ -49,8 +49,8 @@ NODE_ENV=development
 # Chat name shown to users (defaults to "Wake")
 APP_NAME=Wake
 
-# Your phpBB installation URL (e.g., http://localhost/phpbb or https://forum.example.com)
-PHPBB_API_ENDPOINT=http://localhost/phpbb
+# Your phpBB URL including app.php (e.g., https://forum.example.com/app.php)
+PHPBB_API_ENDPOINT=http://localhost/phpbb/app.php
 
 # Extra allowed browser origins (comma-separated); the chat's own origin is always allowed
 CORS_ORIGIN=
@@ -173,8 +173,9 @@ return json_response(['error' => 'Invalid token'], 401);
 
 The chat server is **endpoint-agnostic** — configure the phpBB API URL in `.env`:
 
-- Single phpBB: `PHPBB_API_ENDPOINT=http://forum.example.com`
-- Local dev: `PHPBB_API_ENDPOINT=http://localhost/phpbb`
+- Single phpBB: `PHPBB_API_ENDPOINT=https://forum.example.com/app.php`
+- Local dev: `PHPBB_API_ENDPOINT=http://localhost/phpbb/app.php`
+- Include `/app.php` (phpBB extension routes live there unless URL rewriting is enabled). A trailing slash is ignored.
 - Different endpoint: Any URL that implements the token validation API
 
 ## API Endpoints (Chat Server)
@@ -283,7 +284,7 @@ The server logs important events to the console:
 | `PORT` | `3000` | Server port |
 | `NODE_ENV` | `development` | Environment (development/production) |
 | `APP_NAME` | `Wake` | Chat name shown in the page title, welcome screen and the phpBB online-users widget |
-| `PHPBB_API_ENDPOINT` | `http://localhost/phpbb` | phpBB API base URL |
+| `PHPBB_API_ENDPOINT` | `http://localhost/phpbb/app.php` | phpBB URL including `app.php`; the server calls `<endpoint>/api/auth/validate` |
 | `ALLOW_GUESTS` | `true` | Allow clients to join as guests without phpBB validation |
 | `ALLOW_ROOM_CREATION`| `true` | Allow valid clients to create new dynamic rooms |
 | `CORS_ORIGIN` | _(empty)_ | Extra browser origins allowed to connect, comma-separated. Same-origin is always allowed; `*` allows any site (dev only) |
@@ -301,7 +302,7 @@ Roles come from phpBB user data and are stored in Socket connection context.
 ## Troubleshooting
 
 ### Connection Fails
-- Check `PHPBB_API_ENDPOINT` is correct and accessible
+- Check `PHPBB_API_ENDPOINT` is correct and accessible, and includes `/app.php`. The server logs `[phpBB] Token validation returned HTTP ...` when the endpoint is wrong
 - Verify CORS settings in `.env` match client origin
 - Check server is running: `curl http://localhost:3000/health`
 

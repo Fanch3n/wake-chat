@@ -26,7 +26,11 @@ class PhpBBClient {
       if (!response.ok) {
         let errorData;
         try { errorData = await response.json(); } catch(e) {}
-        return { valid: false, error: errorData?.error || 'Token validation failed' };
+        // 401/403 are normal (expired session, inactive user); anything else is likely misconfiguration
+        if (response.status !== 401 && response.status !== 403) {
+          console.error(`[phpBB] Token validation returned HTTP ${response.status} from ${response.url} - check PHPBB_API_ENDPOINT`);
+        }
+        return { valid: false, error: errorData?.error || `Token validation failed (HTTP ${response.status})` };
       }
 
       const data = await response.json();

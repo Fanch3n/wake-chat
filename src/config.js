@@ -4,8 +4,9 @@ module.exports = {
   // Chat name shown to users (page title, welcome screen, forum widget)
   appName: process.env.APP_NAME?.trim() || 'Wake',
   phpbb: {
-    // Base URL of phpBB installation (e.g., http://localhost/phpbb)
-    apiEndpoint: process.env.PHPBB_API_ENDPOINT || 'http://localhost/phpbb',
+    // Base URL of phpBB extension routes (e.g., https://forum.example.com/app.php).
+    // Trailing slashes are stripped so paths can be appended safely.
+    apiEndpoint: (process.env.PHPBB_API_ENDPOINT?.trim() || 'http://localhost/phpbb/app.php').replace(/\/+$/, ''),
   },
   // Allow guest logins (useful for testing or open chats)
   allowGuests: process.env.ALLOW_GUESTS !== 'false',

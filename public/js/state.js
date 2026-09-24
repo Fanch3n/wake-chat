@@ -2,7 +2,6 @@
  * Client state shared by the UI modules
  */
 export const state = {
-  serverConfig: { allowGuests: true, allowRoomCreation: true },
   user: null, // { id, username, roles } once signed in
   room: null, // Current room: { id, name, isDm }, or null when none is selected
   rooms: [], // Last room list received from the server

@@ -1,87 +1,20 @@
-const { test, before, after, afterEach, mock } = require('node:test');
+const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
 const { once } = require('node:events');
-const { io: ioClient } = require('socket.io-client');
+const { startTestServer, emit, usernames } = require('./support');
 
-// phpBB session IDs accepted by the fake phpBB endpoint below
-const PHPBB_SESSIONS = {
-  'alice-sid': { id: 2, username: 'alice', roles: ['user'] },
-  'bob-sid': { id: 3, username: 'bob', roles: ['user'] },
-  'carol-sid': { id: 4, username: 'carol', roles: ['user'] },
-};
-
-let phpbb;
-let chat;
+let server;
 let baseUrl;
-let clients = [];
-
-/** Fake phpBB extension: POST /app.php/api/auth/validate */
-function startFakePhpbb() {
-  const server = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', (chunk) => (body += chunk));
-    req.on('end', () => {
-      res.setHeader('Content-Type', 'application/json');
-      const user = req.url === '/app.php/api/auth/validate' && PHPBB_SESSIONS[JSON.parse(body).token];
-      if (user) {
-        res.end(JSON.stringify({ user }));
-      } else {
-        res.statusCode = 401;
-        res.end(JSON.stringify({ error: 'Invalid or expired session' }));
-      }
-    });
-  });
-  return server.listen(0, '127.0.0.1');
-}
-
-const emit = (socket, event, data = {}) => new Promise((resolve) => socket.emit(event, data, resolve));
-
-/** Connect a client; `auth` is a phpBB session ID (sent as cookie), 'guest', or null */
-async function connect(auth = null) {
-  const extraHeaders = auth && auth !== 'guest' ? { cookie: `phpbb3_test_sid=${auth}` } : {};
-  const socket = ioClient(baseUrl, { forceNew: true, transports: ['websocket'], extraHeaders });
-  clients.push(socket);
-  await once(socket, 'connect');
-  if (auth) {
-    const response = await emit(socket, 'authenticate', auth === 'guest' ? { isGuest: true } : {});
-    assert.equal(response.success, true, `authentication failed: ${response.error}`);
-    socket.user = response.user;
-  }
-  return socket;
-}
-
-const usernames = (response) => response.users.map((u) => u.username).sort();
+const connect = (auth) => server.connect(auth);
 
 before(async () => {
-  // Keep test output readable
-  mock.method(console, 'log', () => {});
-
-  phpbb = startFakePhpbb();
-  await once(phpbb, 'listening');
-  process.env.PHPBB_API_ENDPOINT = `http://127.0.0.1:${phpbb.address().port}/app.php/`;
-  process.env.ALLOW_GUESTS = 'true';
-  process.env.ALLOW_ROOM_CREATION = 'true';
-
-  // Config is read on require, so load the app after setting the environment
-  const { createChatServer } = require('../src/app');
-  chat = createChatServer();
-  chat.server.listen(0, '127.0.0.1');
-  await once(chat.server, 'listening');
-  baseUrl = `http://127.0.0.1:${chat.server.address().port}`;
+  server = await startTestServer();
+  baseUrl = server.baseUrl;
 });
 
-afterEach(async () => {
-  for (const socket of clients) socket.disconnect();
-  clients = [];
-  // Let the server process the disconnects so state doesn't leak between tests
-  await new Promise((resolve) => setTimeout(resolve, 50));
-});
+afterEach(() => server.disconnectAll());
 
-after(async () => {
-  chat.io.close();
-  phpbb.close();
-});
+after(() => server.close());
 
 test('guests can chat in a room', async () => {
   const a = await connect('guest');

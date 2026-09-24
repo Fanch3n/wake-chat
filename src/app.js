@@ -50,10 +50,17 @@ function createChatServer() {
     console.warn('[Config] CORS_ORIGIN=* allows any website to connect on behalf of logged-in users. Do not use in production.');
   }
 
-  // Chat page with the configured app name filled in (rendered once at startup)
+  // Features turned off in the config; CSS hides their controls from the first paint
+  const bodyClass = [
+    !config.allowGuests && 'guests-disabled',
+    !config.allowRoomCreation && 'room-creation-disabled',
+  ].filter(Boolean).join(' ');
+
+  // Chat page with the configuration filled in (rendered once at startup)
   const indexHtml = fs
     .readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8')
-    .replaceAll('{{APP_NAME}}', escapeHtml(config.appName));
+    .replaceAll('{{APP_NAME}}', escapeHtml(config.appName))
+    .replaceAll('{{BODY_CLASS}}', bodyClass);
 
   app.get(['/', '/index.html'], (req, res) => {
     res.type('html').send(indexHtml);

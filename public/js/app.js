@@ -397,17 +397,6 @@ function autoResize() {
 
 // ============== STARTUP ==============
 
-async function loadServerConfig() {
-  try {
-    const response = await fetch('/api/config');
-    state.serverConfig = await response.json();
-    $('guest-btn').hidden = !state.serverConfig.allowGuests;
-    $('create-room-container').hidden = !state.serverConfig.allowRoomCreation;
-  } catch (err) {
-    console.error('Could not load server config:', err);
-  }
-}
-
 /** Submit handler that doesn't reload the page */
 const onSubmit = (id, fn) =>
   $(id).addEventListener('submit', (e) => {
@@ -435,7 +424,6 @@ function init() {
     }
   });
 
-  loadServerConfig();
   connect();
 }
 

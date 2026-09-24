@@ -255,7 +255,7 @@ Returns public configuration (phpBB API endpoint).
 npm test
 ```
 
-The tests use Node's built-in test runner. `test/chat.test.js` starts the chat server with a fake phpBB endpoint and drives it with real Socket.io clients. GitHub Actions runs the tests before building the Docker image.
+The tests use Node's built-in test runner. `test/support.js` starts the chat server with a fake phpBB endpoint, and the tests drive it with real Socket.io clients. GitHub Actions runs the tests before building the Docker image.
 
 ### Logging
 

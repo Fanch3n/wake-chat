@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node --env-file=.env src/server.js",
     "dev": "nodemon --watch src --watch .env --env-file=.env src/server.js",
-    "test": "node --test"
+    "test": "node --test \"test/**/*.test.js\""
   },
   "keywords": [
     "chat",

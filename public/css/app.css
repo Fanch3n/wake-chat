@@ -82,6 +82,12 @@ body.signed-in .signed-out-only {
   display: none !important;
 }
 
+/* Features turned off in the server config (classes rendered by the server) */
+.guests-disabled #guest-btn,
+.room-creation-disabled #create-room-container {
+  display: none !important;
+}
+
 .icon {
   width: 18px;
   height: 18px;
